@@ -18,10 +18,6 @@
 
 namespace autoware::kalman_filter
 {
-TimeDelayKalmanFilter::TimeDelayKalmanFilter()
-{
-}
-
 void TimeDelayKalmanFilter::init(
   const Eigen::MatrixXd & x, const Eigen::MatrixXd & P0, const int max_delay_step)
 {
