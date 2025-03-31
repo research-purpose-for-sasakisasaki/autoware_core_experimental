@@ -136,7 +136,7 @@ bool KalmanFilter::update(
   const Eigen::MatrixXd PCT = P_ * C.transpose();
   const Eigen::MatrixXd K = PCT * ((R + C * PCT).inverse());
 
-  if (isnan(K.array()).any() || isinf(K.array()).any()) {
+  if (std::isnan(K.array()).any() || std::isinf(K.array()).any()) {
     return false;
   }
 
