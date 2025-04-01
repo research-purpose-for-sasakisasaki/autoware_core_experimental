@@ -460,13 +460,15 @@ std::vector<geometry_msgs::msg::Point> crop_line_string(
         s += segment_length;
         continue;
       }
-      cropped_line_string.push_back(lanelet::utils::conversion::toGeomMsgPt(
-        lanelet::geometry::interpolatedPointAtDistance(segment, s_start - s)));
+      cropped_line_string.push_back(
+        lanelet::utils::conversion::toGeomMsgPt(
+          lanelet::geometry::interpolatedPointAtDistance(segment, s_start - s)));
     }
     s += segment_length;
     if (s >= s_end) {
-      cropped_line_string.push_back(lanelet::utils::conversion::toGeomMsgPt(
-        lanelet::geometry::interpolatedPointAtDistance(segment, s_end - s)));
+      cropped_line_string.push_back(
+        lanelet::utils::conversion::toGeomMsgPt(
+          lanelet::geometry::interpolatedPointAtDistance(segment, s_end - s)));
       break;
     }
     cropped_line_string.push_back(lanelet::utils::conversion::toGeomMsgPt(*it));
