@@ -38,6 +38,9 @@ jobs:
 
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.base_ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -51,7 +54,7 @@ jobs:
       - name: Fetch base branch and generate git diff
         run: |
           git fetch origin ${{ github.base_ref }}  # e.g., 'main'
-          git diff origin/${{ github.base_ref }} > pr_diff.patch
+          git diff origin/${{ github.base_ref }}... > pr_diff.patch
 
       #- name: Wait for Qdrant service
       #  run: |
