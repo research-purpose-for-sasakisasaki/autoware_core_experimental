@@ -53,8 +53,13 @@ jobs:
 
       - name: Fetch base branch and generate git diff
         run: |
-          git fetch origin ${{ github.base_ref }}  # e.g., 'main'
-          git diff origin/${{ github.base_ref }}... > pr_diff.patch
+          BASE_REF="${{ github.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            BASE_REF="main"
+          fi
+          echo "Using base ref: $BASE_REF"
+          git fetch origin $BASE_REF
+          git diff origin/$BASE_REF... > pr_diff.patch
 
       #- name: Wait for Qdrant service
       #  run: |
