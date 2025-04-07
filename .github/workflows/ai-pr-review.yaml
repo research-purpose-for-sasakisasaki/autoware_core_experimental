@@ -1,7 +1,9 @@
 name: AI PR Review with Python and Qdrant
 
 on:
-  workflow_dispatch:  # Manually trigger the action
+  #workflow_dispatch:  # Manually trigger the action
+  pull_request:
+    types: [ready_for_review]
 
 jobs:
   review-with-ai:
