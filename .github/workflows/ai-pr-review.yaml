@@ -1,0 +1,67 @@
+name: AI PR Review with Python and Qdrant
+
+on:
+  workflow_dispatch:  # Manually trigger the action
+
+jobs:
+  review-with-ai:
+    runs-on: ubuntu-latest
+
+    services:
+      qdrant:
+        image: j2sasaki/qdrant-with-data
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "curl -f http://localhost:6333/collections || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      COMMIT_SHA: ${{ github.event.pull_request.head.sha || 'dummy-sha-for-manual-trigger' }}
+      REPO_OWNER: ${{ github.repository_owner }}
+      REPO_NAME: ${{ github.event.repository.name || github.repository }}
+      PR_INDEX: ${{ github.event.pull_request.number || '0' }}
+      QDRANT_HOST: localhost
+      QDRANT_PORT: 6333
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+
+    steps:
+      - name: Generate GitHub App token
+        id: token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.PRIVATE_KEY }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r ${GITHUB_WORKSPACE}/.github/scripts/requirements.txt || echo "No requirements.txt found, skipping."
+
+      - name: Fetch base branch and generate git diff
+        run: |
+          git fetch origin ${{ github.base_ref }}  # e.g., 'main'
+          git diff origin/${{ github.base_ref }} > pr_diff.patch
+
+      - name: Wait for Qdrant service
+        run: |
+          echo "Waiting for Qdrant to be healthy..."
+          for i in {1..10}; do
+            curl -f http://localhost:6333/collections && break || sleep 3
+          done
+
+      - name: Run Python script
+        run: |
+          export PYTHONPATH="${GITHUB_WORKSPACE}/.github/scripts"
+          python .github/scripts/do_chunk_review.py --diff_file pr_diff.patch
+
