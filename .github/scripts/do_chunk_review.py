@@ -102,6 +102,11 @@ def get_relevant_guidelines(client, openai_client, code_chunk):
 
 def main():
 
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--diff_file", type=str, required=True)
+    args = parser.parse_args()
+
     # Initialize clients
     try:
         openai_client, gemini_client, qdrant_client = initialize_clients()
@@ -112,7 +117,7 @@ def main():
         print(f"Unknown error initializing clients: {e}")
         return
 
-    with open('files.diff/sample-001.diff', 'r') as f:
+    with open(args.diff_file, 'r') as f:
         diff_content = f.read()
 
     parsed_diff = parse_diff(diff_content)
