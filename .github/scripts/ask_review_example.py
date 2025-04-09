@@ -55,7 +55,7 @@ But ensure to detect the potential issue in the code.
 Your review will be applied via GitHub API. Therefore,
   - please provide the body,
   - file name,
-  - line number (position): please start counting from 1 just after the "Changes:",
+  - line number (position): please use the line index provided on the left side of the line,
   - and the suggestion.
 in the following JSON format. Note that the property name must be enclosed by double quotes to be valid JSON.
 

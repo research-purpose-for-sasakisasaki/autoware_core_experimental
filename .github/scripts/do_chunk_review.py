@@ -99,6 +99,7 @@ def initialize_clients() -> tuple[openai.Client, genai.GenerativeModel, qdrant.Q
     return openai_client, gemini_client, qdrant_client
 
 
+RELEVANT_SCORE_THRESHOLD = 0.5
 def get_relevant_guidelines(client, openai_client, code_chunk):
     """Retrieve relevant coding guidelines using vector search."""
     results = client.search(
@@ -109,7 +110,7 @@ def get_relevant_guidelines(client, openai_client, code_chunk):
         ).data[0].embedding,
     )
     
-    return [r.payload for r in results if r.score > 0.3]
+    return [r.payload for r in results if r.score > RELEVANT_SCORE_THRESHOLD]
 
 
 MAX_TOKENS = 8000    # < 8192: slightly less than 8192 to ensure the token count is less than 8192
