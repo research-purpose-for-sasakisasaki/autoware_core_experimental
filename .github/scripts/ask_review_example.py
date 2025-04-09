@@ -5,17 +5,17 @@ import google.generativeai as genai
 
 # Do not read via config, but read from environment variables
 try:
-    COMMIT_SHA = os.getenv('COMMIT_SHA')
-    REPO_OWNER = os.getenv('REPO_OWNER')
-    REPO_NAME = os.getenv('REPO_NAME')
-    PR_INDEX = os.getenv('PR_INDEX')
+    COMMIT_SHA = os.environ['COMMIT_SHA']
+    REPO_OWNER = os.environ['REPO_OWNER']
+    REPO_NAME = os.environ['REPO_NAME']
+    PR_INDEX = os.environ['PR_INDEX']
 except KeyError:
     print("Please set the following environment variables: COMMIT_SHA, REPO_OWNER, REPO_NAME, PR_INDEX")
     exit(1)
 
 # GitHub API configuration
 try:
-    github_token = os.getenv('GITHUB_TOKEN')
+    github_token = os.environ['GITHUB_TOKEN']
 except KeyError:
     print("Please set the following environment variables: GITHUB_TOKEN")
     exit(1)
