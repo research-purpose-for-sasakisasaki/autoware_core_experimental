@@ -99,7 +99,7 @@ def initialize_clients() -> tuple[openai.Client, genai.GenerativeModel, qdrant.Q
     return openai_client, gemini_client, qdrant_client
 
 
-RELEVANT_SCORE_THRESHOLD = 0.5
+RELEVANT_SCORE_THRESHOLD = 0.7
 def get_relevant_guidelines(client, openai_client, code_chunk):
     """Retrieve relevant coding guidelines using vector search."""
     results = client.search(
@@ -114,6 +114,7 @@ def get_relevant_guidelines(client, openai_client, code_chunk):
 
 
 MAX_TOKENS = 8000    # < 8192: slightly less than 8192 to ensure the token count is less than 8192
+SUPPORTED_FILE_EXTENSIONS = [".cpp", ".c", ".hpp", ".h", ".py", ".md", ".txt", ".rst"]
 def main():
 
     import argparse
@@ -140,6 +141,12 @@ def main():
     review_targets = []
 
     for file, changes in parsed_diff.items():
+
+        # Skip if the file extension is not supported
+        if not any(file.endswith(ext) for ext in SUPPORTED_FILE_EXTENSIONS):
+            print(f"Skipping {file} because it is not supported")
+            continue
+
         # Count tokens
         count = count_tokens(changes)
 
