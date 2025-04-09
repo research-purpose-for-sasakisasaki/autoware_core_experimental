@@ -134,6 +134,7 @@ def main():
         diff_content = f.read()
 
     parsed_diff = parse_git_diff_to_dict(diff_content)
+    print(parsed_diff)
 
     review_targets = []
 
