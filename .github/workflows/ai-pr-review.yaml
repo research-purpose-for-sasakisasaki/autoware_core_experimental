@@ -54,6 +54,7 @@ jobs:
         run: |
           git fetch origin ${{ github.base_ref }}
           git diff origin/${{ github.base_ref }}... > pr_diff.patch
+          cat pr_diff.patch
 
       - name: Run Python script
         run: |
