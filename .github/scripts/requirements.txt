@@ -1,4 +1,5 @@
 google-generativeai
 openai
+tiktoken
 requests
 qdrant-client

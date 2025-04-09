@@ -1,59 +1,83 @@
 import os
 import re
+import time
+from collections import defaultdict
 
 import openai
+import tiktoken
 import google.generativeai as genai
 import qdrant_client as qdrant
 from ask_review_example import apply_review_for_one_file
 
 
-def parse_diff(diff_content):
-    files = {}
+def parse_git_diff_to_dict(diff_text) -> dict[str, str]:
+    lines = diff_text.splitlines()
+    file_diffs = defaultdict(list)
     current_file = None
-    current_changes = []
-    line_number = 0
+    in_hunk = False
+    old_line_num = None
+    new_line_num = None
 
-    for line in diff_content.split('\n'):
-        if line.startswith('diff --git'):
-            if current_file:
-                files[current_file] = current_changes
-            current_file = re.search(r'b/(.+)$', line).group(1)
-            current_changes = []
-            line_number = 0
-        elif line.startswith('@@'):
-            match = re.search(r'@@ -(\d+),?\d* \+(\d+),?\d* @@', line)
+    for line in lines:
+        # Detect file diff header
+        if line.startswith("diff --git"):
+            match = re.match(r'^diff --git a/(.*?) b/(.*)', line)
             if match:
-                line_number = int(match.group(2)) - 1
-        elif line.startswith('+') or line.startswith('-') or line.startswith(' '):
-            line_number += 1
-            current_changes.append((line_number, line))
+                current_file = match.group(2)  # use destination file path
+                file_diffs[current_file].append(line)
+                in_hunk = False
+            continue
 
-    if current_file:
-        files[current_file] = current_changes
+        if current_file is None:
+            continue  # Skip lines before any file diff appears
 
-    return files
+        # Skip headers (but store them for context)
+        if line.startswith(("index ", "--- ", "+++ ")):
+            file_diffs[current_file].append(line)
+            continue
 
-def group_changes(changes):
-    grouped = []
-    current_group = []
-    last_line_number = None
+        # Detect hunk header
+        hunk_match = re.match(r'^@@ -(\d+),?\d* \+(\d+),?\d* @@', line)
+        if hunk_match:
+            old_line_num = int(hunk_match.group(1))
+            new_line_num = int(hunk_match.group(2))
+            file_diffs[current_file].append(f"{line}  (old_line={old_line_num}, new_line={new_line_num})")
+            in_hunk = True
+            continue
 
-    for line_number, line in changes:
-        if last_line_number is None or line_number == last_line_number + 1:
-            current_group.append((line_number, line))
+        # Ignore anything outside hunks
+        if not in_hunk:
+            file_diffs[current_file].append(line)
+            continue
+
+        # Process diff lines inside hunk
+        if line.startswith('+') and not line.startswith('+++'):
+            file_diffs[current_file].append(f"{new_line_num:4d} + {line[1:]}")
+            new_line_num += 1
+        elif line.startswith('-') and not line.startswith('---'):
+            file_diffs[current_file].append(f"{old_line_num:4d} - {line[1:]}")
+            old_line_num += 1
         else:
-            if current_group:
-                grouped.append(current_group)
-            current_group = [(line_number, line)]
-        last_line_number = line_number
+            # Context line
+            file_diffs[current_file].append(f"{new_line_num:4d}   {line[1:]}")
+            new_line_num += 1
+            old_line_num += 1
 
-    if current_group:
-        grouped.append(current_group)
-
-    return grouped
+    # Convert lists to joined strings
+    return {fname: '\n'.join(contents) for fname, contents in file_diffs.items()}
 
 
-def initialize_clients():
+def count_tokens(text: str, model: str = "text-embedding-ada-002") -> int:
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        # fallback if model isn't explicitly supported
+        encoding = tiktoken.get_encoding("cl100k_base")
+
+    return len(encoding.encode(text))
+
+
+def initialize_clients() -> tuple[openai.Client, genai.GenerativeModel, qdrant.QdrantClient]:
     '''
     Initialize API clients for OpenAI, Gemini, and Qdrant.
     Ensure the following environment variables are set:
@@ -75,18 +99,6 @@ def initialize_clients():
     return openai_client, gemini_client, qdrant_client
 
 
-def format_code_chunk(file, grouped_changes):
-    """Format the code changes into a readable string."""
-    chunk = f"File name: {file}\nChanges:\n"
-    
-    for group in grouped_changes:
-        start_line, end_line = group[0][0], group[-1][0]
-        chunk += f"  Lines {start_line}-{end_line}:\n"
-        chunk += "".join(f"    {line}\n" for _, line in group)
-    
-    return chunk
-
-
 def get_relevant_guidelines(client, openai_client, code_chunk):
     """Retrieve relevant coding guidelines using vector search."""
     results = client.search(
@@ -100,6 +112,7 @@ def get_relevant_guidelines(client, openai_client, code_chunk):
     return [r.payload for r in results if r.score > 0.3]
 
 
+MAX_TOKENS = 8000    # < 8192: slightly less than 8192 to ensure the token count is less than 8192
 def main():
 
     import argparse
@@ -120,20 +133,59 @@ def main():
     with open(args.diff_file, 'r') as f:
         diff_content = f.read()
 
-    parsed_diff = parse_diff(diff_content)
+    parsed_diff = parse_git_diff_to_dict(diff_content)
+
+    review_targets = []
 
     for file, changes in parsed_diff.items():
+        # Count tokens
+        count = count_tokens(changes)
 
-        grouped_changes = group_changes(changes)
-        code_chunk = format_code_chunk(file, grouped_changes)
-        guideline = get_relevant_guidelines(qdrant_client, openai_client, code_chunk)
+        # Consider a case when the number of tokens can be dividable by MAX_TOKENS with remainder or not
+        n_chunks = count // MAX_TOKENS + 1 if count % MAX_TOKENS > 0 else count // MAX_TOKENS
 
-        # If no guideline is found, skip the review
-        if not guideline:
-            print(f"No guideline found for {file}")
+        if n_chunks == 0:
+            print(f"No chunks found for {file}")
             continue
 
+        # Although the number of tokens and length of the code chunk are different,
+        # let's roughtly divide the code chunk into n_chunks.
+        chunk_size = len(changes) // n_chunks
+
+        for i in range(n_chunks):
+            start = i * chunk_size
+            end = min(start + chunk_size, len(changes))
+            code_chunk = changes[start:end]
+
+            # Cut off last line if it is incomplete like as below
+            '''
+            225 -     const auto backward_distance = 40.0;
+            226 -     const auto forward_dis
+            '''
+
+            # Check if the last character is not a newline
+            if code_chunk[-1] != '\n':
+                # Find the position of the last newline
+                last_newline_pos = code_chunk.rfind('\n')
+                # Skip if no newline is found
+                if last_newline_pos == -1:
+                    continue
+
+                # Cut off the last line
+                code_chunk = code_chunk[:last_newline_pos]
+
+            guideline = get_relevant_guidelines(qdrant_client, openai_client, code_chunk)
+
+            # If no guideline is found, skip the review
+            if not guideline:
+                print(f"No guideline found for {file}")
+                continue
+
+            review_targets.append((file, code_chunk, guideline))
+
+    for file, code_chunk, guideline in review_targets:
         apply_review_for_one_file(gemini_client, code_chunk, guideline, file)
+        time.sleep(1)    # To avoid rate limit
 
 if __name__ == "__main__":
     main()
