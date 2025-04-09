@@ -63,3 +63,5 @@ jobs:
         run: |
           export PYTHONPATH="${GITHUB_WORKSPACE}/.github/scripts"
           python .github/scripts/do_chunk_review.py --diff_file pr_diff.patch
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
